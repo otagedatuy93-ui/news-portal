@@ -3,54 +3,65 @@ import time
 import feedparser
 import trafilatura
 from supabase import create_client, Client
+from transformers import pipeline
 
 # --- ENVIRONMENT VARIABLES ---
-# It's critical these are set in your GitHub Repository Secrets
 SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.coL")
 SUPABASE_KEY = os.environ.get("sb_publishable_DjKELrVnsirfhs2DLfNaOg_Zx9ADzhx")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("CRITICAL ERROR: Missing SUPABASE_URL or SUPABASE_KEY environment variables.")
 
-# Initialize database connection
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- CURATED RSS FEEDS ---
-RSS_FEEDS = [
-    # 🇧🇩 BANGLADESH NEWS (English)
-    "https://www.tbsnews.net/tbs-rss",                      # The Business Standard
-    "https://www.thedailystar.net/rss",                     # The Daily Star
-    "https://en.prothomalo.com/feed",                       # Prothom Alo
-    "https://www.dhakatribune.com/rss",                     # Dhaka Tribune
-    
-    # 🌍 INTERNATIONAL NEWS (World Editions)
-    "http://feeds.bbci.co.uk/news/world/rss.xml",           # BBC World News
-    "http://rss.cnn.com/rss/edition.rss",                   # CNN International
-    "https://www.aljazeera.com/xml/rss/all.xml",            # Al Jazeera
-    "https://www.theguardian.com/world/rss",                # The Guardian (World)
-    
-    # 💻 TECH, CODING & STARTUPS
-    "https://techcrunch.com/feed/",                         # TechCrunch
-    "https://www.theverge.com/rss/index.xml",               # The Verge
-    "https://news.ycombinator.com/rss",                     # Hacker News
-    
-    # 🚀 SCIENCE & SPACE
-    "https://www.space.com/feeds/all",                      # Space.com
-    "https://www.sciencedaily.com/rss/all.xml"              # Science Daily
+# --- LOAD THE NLP MODEL (Runs once when script starts) ---
+print("Loading NLP Model... (This takes a few seconds)")
+# We use a lightweight model to ensure it runs smoothly on GitHub Actions free tier
+classifier = pipeline("zero-shot-classification", model="typeform/distilbert-base-uncased-mnli")
+
+# Define your personal categories
+CATEGORIES = [
+    "Tech & Startups", 
+    "Global Politics", 
+    "Bangladesh News", 
+    "Science & Space", 
+    "Economy", 
+    "General News"
 ]
+
+RSS_FEEDS = [
+    "https://www.tbsnews.net/tbs-rss",
+    "https://www.thedailystar.net/rss",
+    "https://en.prothomalo.com/feed",
+    "https://www.dhakatribune.com/rss",
+    "http://feeds.bbci.co.uk/news/world/rss.xml",
+    "http://rss.cnn.com/rss/edition.rss",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "https://www.theguardian.com/world/rss",
+    "https://techcrunch.com/feed/",
+    "https://www.theverge.com/rss/index.xml",
+    "https://news.ycombinator.com/rss",
+    "https://www.space.com/feeds/all",
+    "https://www.sciencedaily.com/rss/all.xml"
+]
+
+def calculate_read_time(text):
+    """Calculates read time based on an average speed of 238 words per minute."""
+    word_count = len(text.split())
+    minutes = max(1, round(word_count / 238))
+    return f"⏱️ {minutes} min read"
 
 def fetch_full_news(rss_url, max_articles=5):
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting feed: {rss_url}")
     
-    # --- 1. SAFE RSS PARSING ---
     try:
         feed = feedparser.parse(rss_url)
     except Exception as e:
         print(f"  [ERROR] Failed to parse feed {rss_url}: {e}")
-        return # Exit this feed gracefully, move to the next
+        return
 
     if not feed.entries:
-        print("  [WARNING] No articles found or invalid feed URL. Skipping.")
+        print("  [WARNING] No articles found.")
         return
 
     articles_processed = 0
@@ -60,7 +71,6 @@ def fetch_full_news(rss_url, max_articles=5):
             break
             
         try:
-            # Safely grab title and link with fallbacks in case XML is malformed
             title = getattr(entry, 'title', 'Untitled')
             link = getattr(entry, 'link', None)
             
@@ -69,55 +79,45 @@ def fetch_full_news(rss_url, max_articles=5):
                 
             print(f"  -> Processing: {title[:50]}...")
             
-            # --- 2. SAFE HTML DOWNLOAD ---
-            try:
-                downloaded_html = trafilatura.fetch_url(link)
-            except Exception as e:
-                print(f"    [ERROR] Download failed for {link}: {e}")
-                continue # Skip this article
+            downloaded_html = trafilatura.fetch_url(link)
+            if not downloaded_html: continue
                 
-            if not downloaded_html:
-                print("    [WARNING] Could not retrieve HTML (site might have bot protection).")
-                continue
-                
-            # --- 3. SAFE TEXT EXTRACTION ---
-            try:
-                full_text = trafilatura.extract(downloaded_html)
-            except Exception as e:
-                print(f"    [ERROR] Text extraction failed: {e}")
-                continue # Skip this article
-                
-            if not full_text or len(full_text.strip()) < 50:
-                print("    [WARNING] Extracted text too short or empty (likely a paywall/video page).")
-                continue
+            full_text = trafilatura.extract(downloaded_html)
+            if not full_text or len(full_text.strip()) < 50: continue
 
-            # --- 4. SAFE DATABASE INSERTION ---
+            # --- NEW: CALCULATE READ TIME & CATEGORY ---
+            read_time_str = calculate_read_time(full_text)
+            
+            print("    [NLP] Categorizing...")
+            # We only send the first 500 characters to the model to save processing time
+            nlp_result = classifier(full_text[:500], CATEGORIES)
+            best_category = nlp_result['labels'][0]
+            print(f"    [NLP] Assigned Category: {best_category}")
+
             article_data = {
                 "title": title,
                 "link": link,
-                "full_text": full_text
+                "full_text": full_text,
+                "category": best_category,
+                "read_time": read_time_str
             }
             
             try:
-                # Push to Supabase
                 supabase.table("articles").insert(article_data).execute()
-                print("    [SUCCESS] Saved to database!")
+                print("    [SUCCESS] Saved to database with AI tags!")
                 articles_processed += 1
             except Exception as e:
-                error_msg = str(e)
-                # Catching duplicate keys gracefully so it doesn't crash the script
-                if "duplicate key value" in error_msg or "23505" in error_msg:
+                if "duplicate key value" in str(e) or "23505" in str(e):
                     print("    [SKIPPED] Already in database.")
                 else:
-                    print(f"    [ERROR] Database insertion failed: {error_msg}")
+                    print(f"    [ERROR] Database insertion failed: {e}")
                     
         except Exception as e:
-            # Global catch for any totally unexpected loop error
-            print(f"    [CRITICAL ERROR] Unexpected failure on an article loop: {e}")
+            print(f"    [CRITICAL ERROR] Loop failure: {e}")
             continue
 
 if __name__ == "__main__":
-    print("=== STARTING NEWS SCRAPER ===")
+    print("=== STARTING NEWS SCRAPER WITH AI ===")
     for feed_url in RSS_FEEDS:
         fetch_full_news(feed_url, max_articles=5)
     print("\n=== SCRAPING COMPLETE ===")
