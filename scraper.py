@@ -7,7 +7,7 @@ from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 
 # --- ENVIRONMENT VARIABLES ---
-SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.coL")
+SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.co")
 SUPABASE_KEY = os.environ.get("sb_publishable_DjKELrVnsirfhs2DLfNaOg_Zx9ADzhx")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
