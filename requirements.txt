@@ -3,3 +3,4 @@ trafilatura
 supabase
 transformers
 torch
+sentence-transformers
