@@ -1,3 +1,5 @@
 feedparser
 trafilatura
 supabase
+transformers
+torch
