@@ -4,7 +4,7 @@ from supabase import create_client, Client
 
 # --- 1. SUPABASE CONNECTION ---
 # Uses the exact same environment variables as your scraper
-SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.coL")
+SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.co")
 SUPABASE_KEY = os.environ.get("sb_publishable_DjKELrVnsirfhs2DLfNaOg_Zx9ADzhx")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
