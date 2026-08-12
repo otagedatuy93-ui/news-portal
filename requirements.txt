@@ -4,3 +4,4 @@ supabase
 transformers
 torch
 sentence-transformers
+python-fasthtml
