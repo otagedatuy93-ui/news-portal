@@ -4,6 +4,7 @@ import feedparser
 import trafilatura
 from supabase import create_client, Client
 from transformers import pipeline
+from sentence_transformers import SentenceTransformer
 
 # --- ENVIRONMENT VARIABLES ---
 SUPABASE_URL = os.environ.get("https://ofbdocelucncurwtgzij.supabase.coL")
@@ -14,12 +15,14 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- LOAD THE NLP MODEL (Runs once when script starts) ---
-print("Loading NLP Model... (This takes a few seconds)")
-# We use a lightweight model to ensure it runs smoothly on GitHub Actions free tier
+# --- LOAD AI MODELS (Runs once when script starts) ---
+print("Loading NLP Categorization Model... (This takes a few seconds)")
 classifier = pipeline("zero-shot-classification", model="typeform/distilbert-base-uncased-mnli")
 
-# Define your personal categories
+print("Loading Vector Embedding Model...")
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+# --- DEFINITIONS ---
 CATEGORIES = [
     "Tech & Startups", 
     "Global Politics", 
@@ -30,19 +33,24 @@ CATEGORIES = [
 ]
 
 RSS_FEEDS = [
-    "https://www.tbsnews.net/tbs-rss",
-    "https://www.thedailystar.net/rss",
-    "https://en.prothomalo.com/feed",
-    "https://www.dhakatribune.com/rss",
-    "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "http://rss.cnn.com/rss/edition.rss",
-    "https://www.aljazeera.com/xml/rss/all.xml",
-    "https://www.theguardian.com/world/rss",
-    "https://techcrunch.com/feed/",
-    "https://www.theverge.com/rss/index.xml",
-    "https://news.ycombinator.com/rss",
-    "https://www.space.com/feeds/all",
-    "https://www.sciencedaily.com/rss/all.xml"
+    # 🇧🇩 BANGLADESH NEWS (English)
+    "https://www.tbsnews.net/tbs-rss",                      
+    "https://www.thedailystar.net/rss",                     
+    "https://en.prothomalo.com/feed",                       
+    "https://www.dhakatribune.com/rss",                     
+    
+    # 🌍 INTERNATIONAL NEWS
+    "http://feeds.bbci.co.uk/news/world/rss.xml",           
+    "http://rss.cnn.com/rss/edition.rss",                   
+    "https://www.aljazeera.com/xml/rss/all.xml",            
+    "https://www.theguardian.com/world/rss",                
+    
+    # 💻 TECH & SCIENCE
+    "https://techcrunch.com/feed/",                         
+    "https://www.theverge.com/rss/index.xml",               
+    "https://news.ycombinator.com/rss",                     
+    "https://www.space.com/feeds/all",                      
+    "https://www.sciencedaily.com/rss/all.xml"              
 ]
 
 def calculate_read_time(text):
@@ -79,32 +87,39 @@ def fetch_full_news(rss_url, max_articles=5):
                 
             print(f"  -> Processing: {title[:50]}...")
             
+            # Download and extract text
             downloaded_html = trafilatura.fetch_url(link)
-            if not downloaded_html: continue
+            if not downloaded_html: 
+                continue
                 
             full_text = trafilatura.extract(downloaded_html)
-            if not full_text or len(full_text.strip()) < 50: continue
+            if not full_text or len(full_text.strip()) < 50: 
+                continue
 
-            # --- NEW: CALCULATE READ TIME & CATEGORY ---
+            # NLP Processing
             read_time_str = calculate_read_time(full_text)
             
             print("    [NLP] Categorizing...")
-            # We only send the first 500 characters to the model to save processing time
             nlp_result = classifier(full_text[:500], CATEGORIES)
             best_category = nlp_result['labels'][0]
             print(f"    [NLP] Assigned Category: {best_category}")
 
+            print("    [NLP] Generating Vector Embedding...")
+            embedding = embedder.encode(full_text[:1500]).tolist()
+
+            # Database Insertion
             article_data = {
                 "title": title,
                 "link": link,
                 "full_text": full_text,
                 "category": best_category,
-                "read_time": read_time_str
+                "read_time": read_time_str,
+                "embedding": embedding
             }
             
             try:
                 supabase.table("articles").insert(article_data).execute()
-                print("    [SUCCESS] Saved to database with AI tags!")
+                print("    [SUCCESS] Saved to database with AI tags & vectors!")
                 articles_processed += 1
             except Exception as e:
                 if "duplicate key value" in str(e) or "23505" in str(e):
