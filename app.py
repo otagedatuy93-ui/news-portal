@@ -10,16 +10,31 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# --- UPGRADED CSS ---
 css = Style('''
-    body { font-family: system-ui, sans-serif; background: #f3f4f6; color: #111827; max-width: 800px; margin: 0 auto; padding: 20px; }
-    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    .article-body { max-height: 250px; overflow: hidden; position: relative; transition: max-height 0.4s ease; font-size: 1.1rem; line-height: 1.6; color: #374151;}
-    .article-body.expanded { max-height: 15000px; }
-    .blur-overlay { position: absolute; bottom: 0; left: 0; width: 100%; height: 120px; background: linear-gradient(transparent, rgba(255,255,255,1) 85%); cursor: pointer; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; font-weight: bold; color: #2563eb; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #0f172a; max-width: 900px; margin: 0 auto; padding: 20px; }
+    
+    /* Category Navigation Bar */
+    .navbar { display: flex; gap: 12px; overflow-x: auto; padding: 15px 0; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; scrollbar-width: none; }
+    .navbar::-webkit-scrollbar { display: none; }
+    .nav-link { background: #e2e8f0; color: #334155; padding: 8px 18px; border-radius: 20px; text-decoration: none; font-weight: 600; white-space: nowrap; transition: 0.2s;}
+    .nav-link:hover { background: #cbd5e1; }
+    .nav-link.active { background: #2563eb; color: white; }
+    
+    /* Modern Card Design */
+    .card { background: white; border-radius: 16px; padding: 25px; margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #f1f5f9;}
+    .article-body { max-height: 180px; overflow: hidden; position: relative; transition: max-height 0.5s ease; font-size: 1.1rem; line-height: 1.7; color: #334155;}
+    .article-body.expanded { max-height: 20000px; }
+    
+    /* Sleeker Blur Overlay */
+    .blur-overlay { position: absolute; bottom: 0; left: 0; width: 100%; height: 100px; background: linear-gradient(transparent, rgba(255,255,255,1) 80%); cursor: pointer; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; font-weight: bold; color: #2563eb; font-size: 1.05rem;}
     .expanded .blur-overlay { display: none; }
-    .meta { display: flex; gap: 10px; margin-bottom: 15px; font-size: 0.85rem; align-items: center;}
-    .badge { background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
-    a { color: #2563eb; text-decoration: none; margin-left: auto; font-weight: 500;}
+    
+    /* Meta Tags */
+    .meta { display: flex; gap: 10px; margin-bottom: 20px; font-size: 0.9rem; align-items: center; flex-wrap: wrap;}
+    .badge { background: #dbeafe; color: #1e40af; padding: 5px 12px; border-radius: 99px; font-weight: 600; }
+    .read-more { color: #2563eb; text-decoration: none; margin-left: auto; font-weight: bold; background: #eff6ff; padding: 6px 16px; border-radius: 8px;}
+    .read-more:hover { background: #bfdbfe; }
 ''')
 
 js = Script('''
@@ -28,24 +43,54 @@ js = Script('''
 
 app, rt = fast_app(hdrs=(css, js))
 
-def ArticleCard(article, page_num, is_last):
-    scroll_attrs = {"hx_get": f"/?page={page_num + 1}", "hx_trigger": "revealed", "hx_swap": "afterend"} if is_last else {}
+# --- CATEGORY NAVIGATION COMPONENT ---
+def NavBar(current_cat):
+    categories = ["Tech & Startups", "Global Politics", "Bangladesh News", "Science & Space", "Economy", "General News"]
+    links = [A("All News", href="/", cls="nav-link active" if not current_cat else "nav-link")]
+    
+    for cat in categories:
+        is_active = "nav-link active" if current_cat == cat else "nav-link"
+        links.append(A(cat, href=f"/?category={cat}", cls=is_active))
+        
+    return Div(*links, cls="navbar")
+
+# --- ARTICLE CARD COMPONENT ---
+def ArticleCard(article, page_num, is_last, current_cat):
+    # Pass the category parameter into the HTMX infinite scroll if a category is selected
+    cat_query = f"&category={current_cat}" if current_cat else ""
+    scroll_attrs = {"hx_get": f"/?page={page_num + 1}{cat_query}", "hx_trigger": "revealed", "hx_swap": "afterend"} if is_last else {}
+    
     return Div(
-        H2(article.get('title', 'Untitled'), style="margin-top: 0;"),
-        Div(Span(article.get('category', 'News'), cls="badge"), Span(article.get('read_time', '⏱️ ? min'), cls="badge"), A("Read ↗", href=article.get('link', '#'), target="_blank"), cls="meta"),
-        Div(*[P(p) for p in article.get('full_text', '').split('\n') if p.strip()], Div("Read full article ↓", cls="blur-overlay", onclick="expandArticle(this)"), cls="article-body"),
+        H2(article.get('title', 'Untitled'), style="margin-top: 0; font-size: 1.6rem; color: #0f172a;"),
+        Div(Span(article.get('category', 'News'), cls="badge"), Span(article.get('read_time', '⏱️ ? min'), cls="badge"), A("Original Site ↗", href=article.get('link', '#'), target="_blank", cls="read-more"), cls="meta"),
+        Div(*[P(p) for p in article.get('full_text', '').split('\n') if p.strip()], Div("Read Full Article ↓", cls="blur-overlay", onclick="expandArticle(this)"), cls="article-body"),
         cls="card", **scroll_attrs
     )
 
+# --- BACKEND ROUTING ---
 @rt("/")
-def get(page: int = 1):
+def get(page: int = 1, category: str = None):
     PAGE_SIZE = 10
     start_idx = (page - 1) * PAGE_SIZE
     end_idx = start_idx + PAGE_SIZE - 1
-    response = supabase.table("articles").select("title, category, read_time, link, full_text").order("created_at", desc=True).range(start_idx, end_idx).execute()
+    
+    # Query Supabase and filter by category if one is clicked
+    query = supabase.table("articles").select("*").order("created_at", desc=True)
+    if category:
+        query = query.eq("category", category)
+        
+    response = query.range(start_idx, end_idx).execute()
     articles = response.data
-    cards = [ArticleCard(art, page, is_last=(i == len(articles) - 1 and len(articles) == PAGE_SIZE)) for i, art in enumerate(articles)]
-    if page > 1: return tuple(cards)
-    return Titled("My News Portal", H1("Personal News Feed", style="text-align: center; color: #111827; font-weight: 800;"), Div(*cards, id="feed-container"))
+    
+    cards = [ArticleCard(art, page, is_last=(i == len(articles) - 1), current_cat=category) for i, art in enumerate(articles)]
+    
+    if page > 1: 
+        return tuple(cards)
+    
+    return Titled("My News Portal", 
+        H1("My Daily Feed", style="text-align: center; font-weight: 900; font-size: 2.5rem; margin-bottom: 10px;"),
+        NavBar(category),
+        Div(*cards, id="feed-container")
+    )
 
 serve()
