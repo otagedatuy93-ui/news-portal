@@ -1,5 +1,4 @@
 import os
-import time
 import feedparser
 import trafilatura
 from supabase import create_client, Client
@@ -31,7 +30,7 @@ RSS_FEEDS = [
 def fetch_full_news(rss_url, max_articles=5):
     print(f"\nStarting feed: {rss_url}")
     try: feed = feedparser.parse(rss_url)
-    except: return
+    except Exception: return
     if not feed.entries: return
     
     articles_processed = 0
@@ -62,7 +61,7 @@ def fetch_full_news(rss_url, max_articles=5):
                 articles_processed += 1
             except Exception as e:
                 if "duplicate" not in str(e) and "23505" not in str(e): print(f"DB Error: {e}")
-        except: continue
+        except Exception: continue
 
 if __name__ == "__main__":
     for feed_url in RSS_FEEDS: fetch_full_news(feed_url, max_articles=5)

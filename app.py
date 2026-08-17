@@ -4,6 +4,10 @@ from supabase import create_client, Client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY")
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 css = Style('''
@@ -38,9 +42,9 @@ def get(page: int = 1):
     PAGE_SIZE = 10
     start_idx = (page - 1) * PAGE_SIZE
     end_idx = start_idx + PAGE_SIZE - 1
-    response = supabase.table("articles").select("*").order("created_at", desc=True).range(start_idx, end_idx).execute()
+    response = supabase.table("articles").select("title, category, read_time, link, full_text").order("created_at", desc=True).range(start_idx, end_idx).execute()
     articles = response.data
-    cards = [ArticleCard(art, page, is_last=(i == len(articles) - 1)) for i, art in enumerate(articles)]
+    cards = [ArticleCard(art, page, is_last=(i == len(articles) - 1 and len(articles) == PAGE_SIZE)) for i, art in enumerate(articles)]
     if page > 1: return tuple(cards)
     return Titled("My News Portal", H1("Personal News Feed", style="text-align: center; color: #111827; font-weight: 800;"), Div(*cards, id="feed-container"))
 
