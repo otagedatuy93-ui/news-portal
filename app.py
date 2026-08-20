@@ -10,12 +10,24 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- UPGRADED CSS ---
+# --- UPGRADED CSS WITH STICKY NAVBAR ---
 css = Style('''
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #0f172a; max-width: 900px; margin: 0 auto; padding: 20px; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #0f172a; max-width: 900px; margin: 0 auto; padding: 0 20px 20px 20px; }
+    
+    /* The Sticky Header Container */
+    .header-container {
+        position: sticky;
+        top: 0;
+        background: #f8fafc; /* Matches body so it looks seamless */
+        z-index: 1000; /* Forces the menu to stay above the scrolling articles */
+        padding-top: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 30px;
+    }
     
     /* Category Navigation Bar */
-    .navbar { display: flex; gap: 12px; overflow-x: auto; padding: 15px 0; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; scrollbar-width: none; }
+    .navbar { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; }
     .navbar::-webkit-scrollbar { display: none; }
     .nav-link { background: #e2e8f0; color: #334155; padding: 8px 18px; border-radius: 20px; text-decoration: none; font-weight: 600; white-space: nowrap; transition: 0.2s;}
     .nav-link:hover { background: #cbd5e1; }
@@ -52,11 +64,14 @@ def NavBar(current_cat):
         is_active = "nav-link active" if current_cat == cat else "nav-link"
         links.append(A(cat, href=f"/?category={cat}", cls=is_active))
         
-    return Div(*links, cls="navbar")
+    # Wrap in the new sticky container
+    return Div(
+        Div(*links, cls="navbar"),
+        cls="header-container"
+    )
 
 # --- ARTICLE CARD COMPONENT ---
 def ArticleCard(article, page_num, is_last, current_cat):
-    # Pass the category parameter into the HTMX infinite scroll if a category is selected
     cat_query = f"&category={current_cat}" if current_cat else ""
     scroll_attrs = {"hx_get": f"/?page={page_num + 1}{cat_query}", "hx_trigger": "revealed", "hx_swap": "afterend"} if is_last else {}
     
@@ -74,7 +89,6 @@ def get(page: int = 1, category: str = None):
     start_idx = (page - 1) * PAGE_SIZE
     end_idx = start_idx + PAGE_SIZE - 1
     
-    # Query Supabase and filter by category if one is clicked
     query = supabase.table("articles").select("*").order("created_at", desc=True)
     if category:
         query = query.eq("category", category)
@@ -88,7 +102,7 @@ def get(page: int = 1, category: str = None):
         return tuple(cards)
     
     return Titled("My News Portal", 
-        H1("My Daily Feed", style="text-align: center; font-weight: 900; font-size: 2.5rem; margin-bottom: 10px;"),
+        H1("My Daily Feed", style="text-align: center; font-weight: 900; font-size: 2.5rem; margin-top: 25px; margin-bottom: 15px;"),
         NavBar(category),
         Div(*cards, id="feed-container")
     )
